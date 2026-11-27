@@ -1,13 +1,100 @@
-import { type PluginScreenProps, useSettings } from "@getpaseo/plugin/client";
+import {
+  type PluginScreenProps,
+  type WorkspaceRef,
+  usePaseo,
+  useSettings,
+  useWorkspace,
+  useWorkspaces,
+} from "@getpaseo/plugin/client";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   type Profile,
   formatEnv,
   parseEnv,
+  profileLabel,
+  profileOf,
   profilesSettings,
   slugify,
 } from "../shared/profiles";
+
+function AssignRow({
+  reference,
+  profiles,
+  theme,
+}: {
+  reference: WorkspaceRef;
+  profiles: readonly Profile[];
+  theme: PluginScreenProps["theme"];
+}) {
+  const workspace = useWorkspace(reference);
+  const paseo = usePaseo();
+  const [error, setError] = useState<string | null>(null);
+  if (!workspace) return null;
+  const current = profileOf(workspace.labels);
+
+  async function assign(next: string | null) {
+    setError(null);
+    try {
+      const handle = paseo.workspaces.ref(reference);
+      // Add the destination before removing the source so a failure keeps the original.
+      if (next) await handle.setLabel(profileLabel(next), { assigned: true });
+      if (current && current !== next) {
+        await handle.setLabel(profileLabel(current), { assigned: false });
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  const options: { id: string | null; name: string }[] = [
+    ...profiles.map((profile) => ({ id: profile.id, name: profile.name })),
+    { id: null, name: "None" },
+  ];
+  return (
+    <View style={{ gap: 6, paddingVertical: 6 }}>
+      <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 14 }}>
+        {workspace.title ?? workspace.name}
+        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>
+          {"  "}
+          {workspace.projectDisplayName}
+        </Text>
+      </Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {options.map((option) => {
+          const selected = option.id === current;
+          return (
+            <Pressable
+              key={option.id ?? "none"}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`Set ${workspace.title ?? workspace.name} to ${option.name}`}
+              onPress={() => void assign(option.id)}
+              style={{
+                paddingVertical: 5,
+                paddingHorizontal: 12,
+                borderRadius: 12,
+                backgroundColor: selected ? theme.colors.accent : theme.colors.surface2,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: selected ? theme.colors.accentForeground : theme.colors.foreground,
+                }}
+              >
+                {option.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? (
+        <Text style={{ color: theme.colors.statusDanger, fontSize: 12 }}>{error}</Text>
+      ) : null}
+    </View>
+  );
+}
 
 export function ManageScreen({ theme, layout }: PluginScreenProps) {
   const state = useSettings(profilesSettings);
@@ -15,6 +102,10 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [envText, setEnvText] = useState("");
   const [providers, setProviders] = useState("");
+  const workspaces = useWorkspaces({
+    where: (workspace) => !workspace.background,
+    orderBy: "name",
+  });
 
   const styles = useMemo(
     () => ({
@@ -161,6 +252,19 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
         <Pressable accessibilityRole="button" onPress={() => void add()} style={styles.button}>
           <Text style={styles.buttonText}>Add profile</Text>
         </Pressable>
+      </View>
+      <Text style={[styles.h, { marginTop: 8 }]}>Assign workspaces</Text>
+      <Text style={styles.muted}>
+        Pick a profile for each workspace. None leaves it under Unassigned.
+      </Text>
+      <View style={styles.card}>
+        {workspaces.length === 0 ? (
+          <Text style={styles.muted}>No workspaces yet.</Text>
+        ) : (
+          workspaces.map((reference) => (
+            <AssignRow key={reference.key} reference={reference} profiles={profiles} theme={theme} />
+          ))
+        )}
       </View>
     </ScrollView>
   );
