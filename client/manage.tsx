@@ -102,6 +102,7 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [envText, setEnvText] = useState("");
   const [providers, setProviders] = useState("");
+  const [addMessage, setAddMessage] = useState<string | null>(null);
   const workspaces = useWorkspaces({
     where: (workspace) => !workspace.background,
     orderBy: "name",
@@ -146,11 +147,21 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
 
   async function add() {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setAddMessage("Type a profile name first.");
+      return;
+    }
     let id = slugify(trimmed);
     while (profiles.some((profile) => profile.id === id)) id = `${id}-2`;
-    if (await save([...profiles, { id, name: trimmed, icon: "User", env: {}, envProviders: [] }])) {
+    const ok = await save([
+      ...profiles,
+      { id, name: trimmed, icon: "User", env: {}, envProviders: [] },
+    ]);
+    if (ok) {
       setName("");
+      setAddMessage(`Added ${trimmed}.`);
+    } else {
+      setAddMessage("Could not save the profile. Pull to reload and try again.");
     }
   }
 
@@ -174,7 +185,11 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.body}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.h}>Profiles</Text>
       <Text style={styles.muted}>
         A profile groups workspaces. Switch the sidebar view to show only one profile. Removing a
@@ -252,6 +267,8 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
         <Pressable accessibilityRole="button" onPress={() => void add()} style={styles.button}>
           <Text style={styles.buttonText}>Add profile</Text>
         </Pressable>
+        {addMessage ? <Text style={styles.muted}>{addMessage}</Text> : null}
+        {state.saveError ? <Text style={styles.danger}>{String(state.saveError)}</Text> : null}
       </View>
       <Text style={[styles.h, { marginTop: 8 }]}>Assign workspaces</Text>
       <Text style={styles.muted}>
