@@ -6,8 +6,8 @@ import {
   useWorkspace,
   useWorkspaces,
 } from "@getpaseo/plugin/client";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { PanResponder, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
   type Profile,
   formatEnv,
@@ -17,6 +17,44 @@ import {
   profilesSettings,
   slugify,
 } from "../shared/profiles";
+
+/** A grip that reports vertical drag distance. Plain PanResponder, so it works on web and native. */
+function DragHandle({
+  theme,
+  onStart,
+  onMove,
+  onEnd,
+}: {
+  theme: PluginScreenProps["theme"];
+  onStart(): void;
+  onMove(dy: number): void;
+  onEnd(dy: number): void;
+}) {
+  const latest = useRef({ onStart, onMove, onEnd });
+  latest.current = { onStart, onMove, onEnd };
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => latest.current.onStart(),
+      onPanResponderMove: (_event, gesture) => latest.current.onMove(gesture.dy),
+      onPanResponderRelease: (_event, gesture) => latest.current.onEnd(gesture.dy),
+      onPanResponderTerminate: () => latest.current.onEnd(0),
+    }),
+  ).current;
+  return (
+    <View
+      {...responder.panHandlers}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel="Drag to reorder"
+      style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+    >
+      <Text style={{ color: theme.colors.foregroundMuted, fontSize: 18 }}>≡</Text>
+    </View>
+  );
+}
 
 function AssignRow({
   reference,
@@ -104,6 +142,8 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
   const [envText, setEnvText] = useState("");
   const [providers, setProviders] = useState("");
   const [addMessage, setAddMessage] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ id: string; dy: number } | null>(null);
+  const layouts = useRef<Record<string, { y: number; h: number }>>({});
   const workspaces = useWorkspaces({
     where: (workspace) => !workspace.background,
     orderBy: "name",
@@ -166,6 +206,26 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
     }
   }
 
+  function moveTo(id: string, index: number) {
+    const from = profiles.findIndex((profile) => profile.id === id);
+    if (from < 0 || index < 0 || index >= profiles.length || index === from) return;
+    const next = [...profiles];
+    const [moved] = next.splice(from, 1);
+    next.splice(index, 0, moved);
+    void save(next);
+  }
+
+  /** Where a card dragged by `dy` would land, from the other cards' midpoints. */
+  function dropIndex(id: string, dy: number): number {
+    const own = layouts.current[id];
+    if (!own) return profiles.findIndex((profile) => profile.id === id);
+    const center = own.y + own.h / 2 + dy;
+    return profiles.filter((profile) => {
+      const other = layouts.current[profile.id];
+      return profile.id !== id && other && other.y + other.h / 2 < center;
+    }).length;
+  }
+
   function startEdit(profile: Profile) {
     setEditing(profile.id);
     setEditName(profile.name);
@@ -198,6 +258,7 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
       style={styles.screen}
       contentContainerStyle={styles.body}
       keyboardShouldPersistTaps="handled"
+      scrollEnabled={drag === null}
     >
       <Text style={styles.h}>Profiles</Text>
       <Text style={styles.muted}>
@@ -205,11 +266,61 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
         profile keeps its workspaces and moves them to Unassigned.
       </Text>
       {state.saveError ? <Text style={styles.danger}>{String(state.saveError)}</Text> : null}
-      {profiles.map((profile) => (
-        <View key={profile.id} style={styles.card}>
-          <Text style={{ color: theme.colors.foreground, fontSize: 15 }}>
-            {profile.name} <Text style={styles.muted}>({profile.id})</Text>
-          </Text>
+      {profiles.map((profile, index) => (
+        <View
+          key={profile.id}
+          onLayout={(event) => {
+            const { y, height } = event.nativeEvent.layout;
+            layouts.current[profile.id] = { y, h: height };
+          }}
+          style={[
+            styles.card,
+            drag?.id === profile.id
+              ? {
+                  transform: [{ translateY: drag.dy }],
+                  zIndex: 10,
+                  borderWidth: 1,
+                  borderColor: theme.colors.accent,
+                }
+              : null,
+            drag && drag.id !== profile.id && dropIndex(drag.id, drag.dy) === index
+              ? { borderTopWidth: 2, borderTopColor: theme.colors.accent }
+              : null,
+          ]}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <DragHandle
+              theme={theme}
+              onStart={() => setDrag({ id: profile.id, dy: 0 })}
+              onMove={(dy) => setDrag({ id: profile.id, dy })}
+              onEnd={(dy) => {
+                const target = dropIndex(profile.id, dy);
+                setDrag(null);
+                moveTo(profile.id, target);
+              }}
+            />
+            <Text style={{ flex: 1, color: theme.colors.foreground, fontSize: 15 }}>
+              {profile.name} <Text style={styles.muted}>({profile.id})</Text>
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${profile.name} up`}
+              disabled={index === 0}
+              onPress={() => moveTo(profile.id, index - 1)}
+              style={{ padding: 8, opacity: index === 0 ? 0.3 : 1 }}
+            >
+              <Text style={{ color: theme.colors.foreground }}>▲</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Move ${profile.name} down`}
+              disabled={index === profiles.length - 1}
+              onPress={() => moveTo(profile.id, index + 1)}
+              style={{ padding: 8, opacity: index === profiles.length - 1 ? 0.3 : 1 }}
+            >
+              <Text style={{ color: theme.colors.foreground }}>▼</Text>
+            </Pressable>
+          </View>
           <Text style={styles.muted}>
             {Object.keys(profile.env).length} environment variable(s)
           </Text>
