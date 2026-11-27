@@ -10,7 +10,9 @@ Requires Paseo 0.17.4 or later.
 
 ## Optional environment per profile
 
-A profile can hold environment variables, such as a different API key for work. They are added to every agent started in that profile's workspaces, optionally only for the providers you list. Values are stored unencrypted in the daemon's plugin settings, so use this for convenience, not as a secret vault.
+A profile can hold environment variables, such as a different API key for work. They are added to every agent started in that profile's workspaces, optionally only for the providers you list. The values are passed to the agent provider process for those sessions, so any program that process runs can read them. They are stored unencrypted in the daemon's plugin settings on the host, and clients connected to the daemon can read them on the Profiles screen. Use this for convenience, not as a secret vault.
+
+The plugin sends nothing to any other service and downloads nothing.
 
 ## Limits
 
