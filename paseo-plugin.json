@@ -1,6 +1,7 @@
 {
   "id": "paseo-multi-profile",
   "name": "Multi profile",
+  "description": "Separate workspaces into profiles such as home and work on one Paseo daemon, with optional per-profile environment variables.",
   "media": [],
   "requirements": {
     "paseo": ">=0.17.4"
