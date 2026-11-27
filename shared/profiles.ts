@@ -42,6 +42,8 @@ export const activeSettings = defineSettings({
   schema: z.object({
     active: z.string().default(ALL_PROFILES),
     showUnassigned: z.boolean().default(true),
+    /** Collapsed tree nodes, e.g. `p:work` or `g:work:<projectKey>`. */
+    collapsed: z.array(z.string()).default([]),
   }),
 });
 
