@@ -100,6 +100,7 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
   const state = useSettings(profilesSettings);
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [envText, setEnvText] = useState("");
   const [providers, setProviders] = useState("");
   const [addMessage, setAddMessage] = useState<string | null>(null);
@@ -167,18 +168,26 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
 
   function startEdit(profile: Profile) {
     setEditing(profile.id);
+    setEditName(profile.name);
     setEnvText(formatEnv(profile.env));
     setProviders(profile.envProviders.join(", "));
   }
 
   async function commitEdit(id: string) {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      setAddMessage("A profile needs a name.");
+      return;
+    }
     const envProviders = providers
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
     const ok = await save(
       profiles.map((profile) =>
-        profile.id === id ? { ...profile, env: parseEnv(envText), envProviders } : profile,
+        profile.id === id
+          ? { ...profile, name: trimmedName, env: parseEnv(envText), envProviders }
+          : profile,
       ),
     );
     if (ok) setEditing(null);
@@ -206,6 +215,15 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
           </Text>
           {editing === profile.id ? (
             <View style={{ gap: 8 }}>
+              <Text style={styles.muted}>Name</Text>
+              <TextInput
+                value={editName}
+                onChangeText={setEditName}
+                accessibilityLabel={`Name of ${profile.name}`}
+                style={styles.input}
+                placeholderTextColor={theme.colors.foregroundMuted}
+                placeholder="Profile name"
+              />
               <Text style={styles.muted}>
                 Environment for agents in this profile, one KEY=value per line. Stored unencrypted on
                 the daemon host.
@@ -242,7 +260,7 @@ export function ManageScreen({ theme, layout }: PluginScreenProps) {
           ) : (
             <View style={{ flexDirection: "row", gap: 16 }}>
               <Pressable accessibilityRole="button" onPress={() => startEdit(profile)}>
-                <Text style={styles.link}>Edit environment</Text>
+                <Text style={styles.link}>Edit</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
