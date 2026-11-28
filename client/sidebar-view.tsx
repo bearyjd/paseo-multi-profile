@@ -44,7 +44,9 @@ function WorkspaceRow({
   // react-native-web forwards onContextMenu (right click); touch uses long press.
   const openMenu = (event?: { preventDefault?: () => void }) => {
     event?.preventDefault?.();
-    setOpen(true);
+    // A second right click closes the menu, and cancels a pending archive.
+    if (open) setConfirmArchive(false);
+    setOpen(!open);
   };
   const contextMenu = { onContextMenu: openMenu } as object;
   const selected = active.workspace?.key === reference.key;
@@ -101,7 +103,10 @@ function WorkspaceRow({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Change profile of ${workspace.title ?? workspace.name}`}
-          onPress={() => setOpen((value) => !value)}
+          onPress={() => {
+            if (open) setConfirmArchive(false);
+            setOpen((value) => !value);
+          }}
           style={{
             flexShrink: 0,
             marginLeft: 8,
@@ -192,7 +197,7 @@ function ProjectHeader({
   const [menu, setMenu] = useState(false);
   const show = (event?: { preventDefault?: () => void }) => {
     event?.preventDefault?.();
-    setMenu(true);
+    setMenu((value) => !value);
   };
   return (
     <View>
