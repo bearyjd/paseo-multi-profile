@@ -9,6 +9,14 @@ A [Paseo](https://paseo.sh) plugin that separates workspaces into profiles (for 
 
 Profiles are a label (`profile:<id>`) on each workspace. This is organisation, not access control.
 
+## Screenshots
+
+Sample data only.
+
+| Sidebar tree | Workspace menu | Profiles screen |
+| --- | --- | --- |
+| ![Sidebar tree grouped by profile](docs/screenshots/sidebar-tree.png) | ![Right click menu on a workspace](docs/screenshots/workspace-menu.png) | ![Profiles screen with assignment list](docs/screenshots/profiles-screen.png) |
+
 ## Install
 
 ```bash
