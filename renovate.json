@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on the first day of the month"],
+  "packageRules": [
+    {
+      "description": "These dev dependencies mirror what the Paseo host provides at runtime. Bump them by hand when raising requirements.paseo.",
+      "matchPackageNames": ["@getpaseo/plugin", "react", "react-native", "@types/react"],
+      "enabled": false
+    },
+    {
+      "description": "CI stays on the Node LTS line.",
+      "matchDepNames": ["node"],
+      "enabled": false
+    },
+    {
+      "description": "One PR for all GitHub Actions updates.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
+    }
+  ]
+}
