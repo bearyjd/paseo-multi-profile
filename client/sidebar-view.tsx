@@ -36,8 +36,17 @@ function WorkspaceRow({
   const workspace = useWorkspace(reference);
   const paseo = usePaseo();
   const [open, setOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   if (!workspace) return null;
   const current = profileOf(workspace.labels);
+  const label = workspace.title ?? workspace.name;
+  // react-native-web forwards onContextMenu (right click); touch uses long press.
+  const openMenu = (event?: { preventDefault?: () => void }) => {
+    event?.preventDefault?.();
+    setOpen(true);
+  };
+  const contextMenu = { onContextMenu: openMenu } as object;
   const selected = active.workspace?.key === reference.key;
 
   async function assign(next: string | null) {
@@ -46,6 +55,19 @@ function WorkspaceRow({
     if (next) await handle.setLabel(profileLabel(next), { assigned: true });
     if (current && current !== next) await handle.setLabel(profileLabel(current), { assigned: false });
     setOpen(false);
+  }
+
+  async function archive() {
+    if (!confirmArchive) {
+      setConfirmArchive(true);
+      return;
+    }
+    try {
+      await paseo.workspaces.ref(reference).archive();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setConfirmArchive(false);
+    }
   }
 
   return (
@@ -65,6 +87,8 @@ function WorkspaceRow({
           accessibilityLabel={`Open workspace ${workspace.title ?? workspace.name}`}
           style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}
           onPress={() => navigation.openWorkspace(reference)}
+          onLongPress={() => openMenu()}
+          {...contextMenu}
         >
           <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 12, lineHeight: 16 }}>
             {workspace.title ?? workspace.name}
@@ -127,6 +151,83 @@ function WorkspaceRow({
               </Text>
             </Pressable>
           ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${confirmArchive ? "Confirm archive of" : "Archive"} ${label}`}
+            onPress={() => void archive()}
+            style={{ paddingVertical: 4, paddingHorizontal: 12 }}
+          >
+            <Text style={{ color: theme.colors.statusDanger, fontSize: 12 }}>
+              {confirmArchive ? "Tap again to archive this workspace" : "Archive workspace"}
+            </Text>
+          </Pressable>
+          {error ? (
+            <Text style={{ color: theme.colors.statusDanger, fontSize: 11, paddingHorizontal: 12 }}>
+              {error}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ProjectHeader({
+  first,
+  label,
+  count,
+  open,
+  onToggle,
+  props,
+}: {
+  first: WorkspaceRef;
+  label: string;
+  count: number;
+  open: boolean;
+  onToggle(): void;
+  props: Props;
+}) {
+  const { theme, navigation } = props;
+  const project = useWorkspace(first, (workspace) => workspace.project);
+  const [menu, setMenu] = useState(false);
+  const show = (event?: { preventDefault?: () => void }) => {
+    event?.preventDefault?.();
+    setMenu(true);
+  };
+  return (
+    <View>
+      <TreeHeader
+        label={label}
+        count={count}
+        depth={1}
+        open={open}
+        onToggle={onToggle}
+        theme={theme}
+        onMenu={show}
+      />
+      {menu && project ? (
+        <View style={{ paddingLeft: 36, paddingBottom: 4 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`New workspace in ${label}`}
+            onPress={() => {
+              setMenu(false);
+              navigation.openProject(project);
+            }}
+            style={{ paddingVertical: 4, paddingHorizontal: 12 }}
+          >
+            <Text style={{ color: theme.colors.accent, fontSize: 12 }}>
+              New workspace in {label}
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+            onPress={() => setMenu(false)}
+            style={{ paddingVertical: 4, paddingHorizontal: 12 }}
+          >
+            <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>Close</Text>
+          </Pressable>
         </View>
       ) : null}
     </View>
@@ -178,6 +279,7 @@ function TreeHeader({
   depth,
   open,
   onToggle,
+  onMenu,
   theme,
 }: {
   label: string;
@@ -185,14 +287,19 @@ function TreeHeader({
   depth: 0 | 1;
   open: boolean;
   onToggle(): void;
+  /** Right click or long press. */
+  onMenu?: (event?: { preventDefault?: () => void }) => void;
   theme: Props["theme"];
 }) {
+  const contextMenu = onMenu ? ({ onContextMenu: onMenu } as object) : {};
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
       accessibilityLabel={`${open ? "Collapse" : "Expand"} ${label}`}
       onPress={onToggle}
+      onLongPress={onMenu ? () => onMenu() : undefined}
+      {...contextMenu}
       style={{
         flexDirection: "row",
         alignItems: "center",
@@ -343,14 +450,25 @@ export function ProfileSidebarView(props: PluginSidebarViewProps) {
                   const groupOpen = !collapsed.has(groupKey);
                   return (
                     <View key={group.key}>
-                      <TreeHeader
-                        label={group.title ?? bucket}
-                        count={group.items.length}
-                        depth={1}
-                        open={groupOpen}
-                        onToggle={() => toggle(groupKey)}
-                        theme={theme}
-                      />
+                      {bucket === EMPTY ? (
+                        <TreeHeader
+                          label={group.title ?? bucket}
+                          count={group.items.length}
+                          depth={1}
+                          open={groupOpen}
+                          onToggle={() => toggle(groupKey)}
+                          theme={theme}
+                        />
+                      ) : (
+                        <ProjectHeader
+                          first={group.items[0]}
+                          label={group.title ?? bucket}
+                          count={group.items.length}
+                          open={groupOpen}
+                          onToggle={() => toggle(groupKey)}
+                          props={props}
+                        />
+                      )}
                       {groupOpen
                         ? group.items.map((reference) => (
                             <WorkspaceRow
